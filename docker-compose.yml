@@ -13,6 +13,16 @@ services:
       # Set to false once you and whoever else needs an account have
       # registered, to close the server to new signups.
       REEFTERM_SYNC_ALLOW_REGISTRATION: "true"
+      # Optional: enables email-based account recovery (a forgotten
+      # passphrase with no device left signed in). Leave unset to run
+      # without it. See README.md for the full list of SMTP variables,
+      # including REEFTERM_SYNC_SMTP_TLS for providers on port 465 or a
+      # relay with no TLS at all.
+      # REEFTERM_SYNC_SMTP_HOST: smtp.zeptomail.com
+      # REEFTERM_SYNC_SMTP_PORT: "587"
+      # REEFTERM_SYNC_SMTP_USERNAME: emailapikey
+      # REEFTERM_SYNC_SMTP_PASSWORD: your-smtp-token
+      # REEFTERM_SYNC_SMTP_FROM: "Reef Terminal <noreply@your-domain.com>"
 
 volumes:
   reefterm-sync-data:

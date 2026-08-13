@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 
+CREATE TABLE IF NOT EXISTS recovery_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_tokens_user_id ON recovery_tokens(user_id);
+
 CREATE TABLE IF NOT EXISTS wrapped_keys (
     user_id TEXT NOT NULL REFERENCES users(id),
     variant TEXT NOT NULL,
@@ -167,6 +176,77 @@ func (s *Store) GetSession(ctx context.Context, tokenHash string) (model.Session
 
 func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = ?`, tokenHash)
+	return err
+}
+
+func (s *Store) DeleteSessionsByUserID(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
+// CreateRecoveryToken runs both statements in one transaction: invalidating
+// old tokens and inserting the new one must not be observable as two
+// separate writes, or a request racing in between could still redeem a
+// token this call meant to have already retired.
+func (s *Store) CreateRecoveryToken(ctx context.Context, t model.RecoveryToken) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE recovery_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL`,
+		time.Now().UTC(), t.UserID,
+	); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO recovery_tokens (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		t.TokenHash, t.UserID, t.CreatedAt.UTC(), t.ExpiresAt.UTC(),
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Store) GetRecoveryToken(ctx context.Context, tokenHash string) (model.RecoveryToken, error) {
+	var t model.RecoveryToken
+	var usedAt sql.NullTime
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT token_hash, user_id, created_at, expires_at, used_at FROM recovery_tokens WHERE token_hash = ?`,
+		tokenHash,
+	).Scan(&t.TokenHash, &t.UserID, &t.CreatedAt, &t.ExpiresAt, &usedAt)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.RecoveryToken{}, store.ErrNotFound
+	}
+	if err != nil {
+		return model.RecoveryToken{}, err
+	}
+
+	t.CreatedAt = t.CreatedAt.UTC()
+	t.ExpiresAt = t.ExpiresAt.UTC()
+
+	if usedAt.Valid {
+		when := usedAt.Time.UTC()
+		t.UsedAt = &when
+		return model.RecoveryToken{}, store.ErrNotFound
+	}
+
+	if t.ExpiresAt.Before(time.Now()) {
+		return model.RecoveryToken{}, store.ErrNotFound
+	}
+
+	return t, nil
+}
+
+func (s *Store) MarkRecoveryTokenUsed(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE recovery_tokens SET used_at = ? WHERE token_hash = ?`, time.Now().UTC(), tokenHash)
 	return err
 }
 

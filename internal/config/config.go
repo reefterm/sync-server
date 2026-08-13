@@ -4,7 +4,10 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"time"
+
+	"github.com/reefterm/sync-server/internal/mail"
 )
 
 type Config struct {
@@ -20,6 +23,14 @@ type Config struct {
 	// SessionTTL is how long a session token is valid before login is
 	// required again.
 	SessionTTL time.Duration
+	// RecoveryTokenTTL is how long an emailed recovery link is valid for.
+	RecoveryTokenTTL time.Duration
+	// SMTP is generic on purpose: every transactional-mail provider speaks
+	// it (Zeptomail included, alongside its own API), and it is the only
+	// option that also works for an operator relaying through their own
+	// mail server. Email-based recovery (see internal/api's recover
+	// handlers) is simply unavailable if this is left unset.
+	SMTP mail.Config
 }
 
 func Load() Config {
@@ -28,6 +39,16 @@ func Load() Config {
 		ListenAddr:        getString("REEFTERM_SYNC_LISTEN_ADDR", ":8420"),
 		AllowRegistration: getBool("REEFTERM_SYNC_ALLOW_REGISTRATION", true),
 		SessionTTL:        getDuration("REEFTERM_SYNC_SESSION_TTL", 30*24*time.Hour),
+		RecoveryTokenTTL:  getDuration("REEFTERM_SYNC_RECOVERY_TOKEN_TTL", 30*time.Minute),
+		SMTP: mail.Config{
+			Host:               getString("REEFTERM_SYNC_SMTP_HOST", ""),
+			Port:               getInt("REEFTERM_SYNC_SMTP_PORT", 587),
+			Username:           getString("REEFTERM_SYNC_SMTP_USERNAME", ""),
+			Password:           getString("REEFTERM_SYNC_SMTP_PASSWORD", ""),
+			From:               getString("REEFTERM_SYNC_SMTP_FROM", ""),
+			TLSMode:            mail.TLSMode(getString("REEFTERM_SYNC_SMTP_TLS", "starttls")),
+			InsecureSkipVerify: getBool("REEFTERM_SYNC_SMTP_INSECURE_SKIP_VERIFY", false),
+		},
 	}
 }
 
@@ -36,6 +57,18 @@ func getString(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func getBool(key string, fallback bool) bool {

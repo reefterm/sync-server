@@ -52,6 +52,23 @@ type Session struct {
 	ExpiresAt  time.Time
 }
 
+// RecoveryToken proves control of the account's registered email, as a
+// prerequisite to email-based recovery. TokenHash, never the raw token, is
+// what's stored, for the same reason a Session's is: a database leak must
+// not hand out a usable token.
+//
+// UsedAt is nil until the token is spent completing a recovery. It stays in
+// the table (not deleted) so a reused token is a "this token isn't valid"
+// error rather than a "no such token", which is what makes double-submit
+// and replay attempts fail the same way as a token that was never valid.
+type RecoveryToken struct {
+	TokenHash string
+	UserID    string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
 // Snapshot is one user's synced setup: an encrypted blob plus the bookkeeping
 // that makes concurrent devices safe. Revision is compared against a
 // client's base_revision for optimistic-concurrency writes -- see

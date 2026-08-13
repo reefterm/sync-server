@@ -12,10 +12,42 @@ import (
 	"time"
 
 	"github.com/reefterm/sync-server/internal/config"
+	"github.com/reefterm/sync-server/internal/mail"
 	"github.com/reefterm/sync-server/internal/store/sqlite"
 )
 
+// fakeMailer captures what would have been sent, so a test can assert on
+// the recovery token without standing up a real SMTP server.
+type fakeMailer struct {
+	sent []sentMail
+}
+
+type sentMail struct {
+	to, subject, body string
+}
+
+func (m *fakeMailer) Send(to, subject, body string) error {
+	m.sent = append(m.sent, sentMail{to, subject, body})
+	return nil
+}
+
+func (m *fakeMailer) last() sentMail {
+	if len(m.sent) == 0 {
+		return sentMail{}
+	}
+	return m.sent[len(m.sent)-1]
+}
+
 func newTestServer(t *testing.T) *Server {
+	t.Helper()
+	srv, _ := newTestServerWithMail(t, false)
+	return srv
+}
+
+// newTestServerWithMail additionally configures (or deliberately leaves
+// unconfigured) an SMTP server, and returns the fake mailer so a test can
+// inspect what was sent.
+func newTestServerWithMail(t *testing.T, smtpConfigured bool) (*Server, *fakeMailer) {
 	t.Helper()
 
 	st, err := sqlite.Open(filepath.Join(t.TempDir(), "test.db"))
@@ -28,10 +60,15 @@ func newTestServer(t *testing.T) *Server {
 		DBPath:            ":memory:",
 		AllowRegistration: true,
 		SessionTTL:        time.Hour,
+		RecoveryTokenTTL:  30 * time.Minute,
+	}
+	if smtpConfigured {
+		cfg.SMTP = mail.Config{Host: "smtp.example.com", Port: 587, From: "noreply@example.com"}
 	}
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return New(st, cfg, log)
+	fake := &fakeMailer{}
+	return New(st, cfg, log, fake), fake
 }
 
 func doJSON(t *testing.T, srv *Server, method, path string, body any, token string) *httptest.ResponseRecorder {

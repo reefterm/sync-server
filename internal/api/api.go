@@ -14,6 +14,7 @@ import (
 
 	"github.com/reefterm/sync-server/internal/auth"
 	"github.com/reefterm/sync-server/internal/config"
+	"github.com/reefterm/sync-server/internal/mail"
 	"github.com/reefterm/sync-server/internal/store"
 )
 
@@ -22,14 +23,15 @@ import (
 var Version = "dev"
 
 type Server struct {
-	store store.Store
-	cfg   config.Config
-	log   *slog.Logger
-	mux   *http.ServeMux
+	store  store.Store
+	cfg    config.Config
+	log    *slog.Logger
+	mux    *http.ServeMux
+	mailer mail.Mailer
 }
 
-func New(st store.Store, cfg config.Config, log *slog.Logger) *Server {
-	s := &Server{store: st, cfg: cfg, log: log, mux: http.NewServeMux()}
+func New(st store.Store, cfg config.Config, log *slog.Logger, mailer mail.Mailer) *Server {
+	s := &Server{store: st, cfg: cfg, log: log, mux: http.NewServeMux(), mailer: mailer}
 	s.routes()
 	return s
 }
@@ -47,6 +49,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/logout", s.withAuth(s.handleLogout))
 	s.mux.HandleFunc("GET /api/v1/account", s.withAuth(s.handleAccount))
 	s.mux.HandleFunc("PUT /api/v1/account/password", s.withAuth(s.handleChangePassword))
+
+	s.mux.HandleFunc("POST /api/v1/recover/start", s.handleRecoverStart)
+	s.mux.HandleFunc("POST /api/v1/recover/keys", s.handleRecoverKeys)
+	s.mux.HandleFunc("POST /api/v1/recover/complete", s.handleRecoverComplete)
 
 	s.mux.HandleFunc("GET /api/v1/sync/keys", s.withAuth(s.handleGetSyncKeys))
 	s.mux.HandleFunc("PUT /api/v1/sync/keys/passphrase", s.withAuth(s.handlePutSyncKeyPassphrase))

@@ -15,6 +15,7 @@ import (
 
 	"github.com/reefterm/sync-server/internal/api"
 	"github.com/reefterm/sync-server/internal/config"
+	"github.com/reefterm/sync-server/internal/mail"
 	"github.com/reefterm/sync-server/internal/store/sqlite"
 )
 
@@ -29,7 +30,17 @@ func main() {
 	}
 	defer func() { _ = st.Close() }()
 
-	srv := api.New(st, cfg, log)
+	var mailer mail.Mailer
+	if cfg.SMTP.Configured() {
+		mailer = mail.NewSMTPMailer(cfg.SMTP)
+	} else {
+		log.Warn("no SMTP server configured; email-based account recovery is unavailable")
+		mailer = mail.NoopMailer{Log: func(to, subject, _ string) {
+			log.Info("mail suppressed (no SMTP configured)", "to", to, "subject", subject)
+		}}
+	}
+
+	srv := api.New(st, cfg, log, mailer)
 
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddr,

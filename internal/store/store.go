@@ -40,6 +40,22 @@ type Store interface {
 	// to branch on, it's just gone.
 	GetSession(ctx context.Context, tokenHash string) (model.Session, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
+	// DeleteSessionsByUserID revokes every session for a user in one call --
+	// used when email-based recovery completes, since a password/passphrase
+	// reset should not leave whatever session an attacker may already hold
+	// still valid.
+	DeleteSessionsByUserID(ctx context.Context, userID string) error
+
+	// CreateRecoveryToken also invalidates any of the user's previous unused
+	// tokens, so at most one is ever live -- the last email sent is the one
+	// that works, and requesting a new one can't be used to keep an old,
+	// possibly-leaked token valid indefinitely.
+	CreateRecoveryToken(ctx context.Context, t model.RecoveryToken) error
+	// GetRecoveryToken returns ErrNotFound for a token that never existed,
+	// has expired, or has already been used -- all three are "this token
+	// doesn't grant anything", not three cases a caller must tell apart.
+	GetRecoveryToken(ctx context.Context, tokenHash string) (model.RecoveryToken, error)
+	MarkRecoveryTokenUsed(ctx context.Context, tokenHash string) error
 
 	PutWrappedKey(ctx context.Context, wk model.WrappedKey) error
 	GetWrappedKeys(ctx context.Context, userID string) ([]model.WrappedKey, error)

@@ -22,9 +22,9 @@ lives in its own repository rather than inside
 
 ## Status
 
-Early. The design is settled (see the parent project's planning discussion),
-implementation is starting now. Not ready to run in production yet -- this
-notice will be removed once it is.
+Early. The core API (register, login, sync keys, snapshots, password change,
+email-based recovery) is implemented and tested. Not ready to run in
+production yet -- this notice will be removed once it is.
 
 ## Design
 
@@ -40,6 +40,31 @@ notice will be removed once it is.
   actually derives the E2EE key never reaches this server in any form --
   see Reef Terminal's `src/main/sync-keys.js` for that half of the design.
 
+## Configuration
+
+All environment variables, all optional except where noted:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `REEFTERM_SYNC_DB_PATH` | `reefterm-sync.db` | Path to the SQLite file. |
+| `REEFTERM_SYNC_LISTEN_ADDR` | `:8420` | Address to listen on. |
+| `REEFTERM_SYNC_ALLOW_REGISTRATION` | `true` | Set to `false` once everyone who needs an account has one, to close the server to new signups. |
+| `REEFTERM_SYNC_SESSION_TTL` | `720h` (30 days) | How long a session lasts before login is required again. Go duration syntax (`24h`, `30m`). |
+| `REEFTERM_SYNC_RECOVERY_TOKEN_TTL` | `30m` | How long an emailed recovery link stays valid. |
+| `REEFTERM_SYNC_SMTP_HOST` | unset | SMTP server hostname. Email-based account recovery (a forgotten passphrase, with no device left signed in) is unavailable until this is set. |
+| `REEFTERM_SYNC_SMTP_PORT` | `587` | SMTP port. `465` for implicit TLS, `587` for STARTTLS, `25` for neither. |
+| `REEFTERM_SYNC_SMTP_USERNAME` | unset | SMTP auth username, if your server requires it. |
+| `REEFTERM_SYNC_SMTP_PASSWORD` | unset | SMTP auth password. |
+| `REEFTERM_SYNC_SMTP_FROM` | unset | The `From:` address on recovery emails. Required alongside `SMTP_HOST` to enable recovery. |
+| `REEFTERM_SYNC_SMTP_TLS` | `starttls` | `tls` (implicit, port 465), `starttls` (port 587), or `none` (unencrypted -- only ever appropriate for a relay on localhost or a private network). |
+| `REEFTERM_SYNC_SMTP_INSECURE_SKIP_VERIFY` | `false` | Skip TLS certificate verification. For a self-signed relay in development; never appropriate against a real provider. |
+
+Generic SMTP rather than a specific provider's API on purpose: every
+transactional-mail provider speaks it, alongside whatever API they'd rather
+sell you, and it's the only option that also works for an operator relaying
+through their own mail server. If you use [Zeptomail](https://www.zoho.com/zeptomail/),
+their SMTP credentials work here directly -- no separate integration needed.
+
 ## Development
 
 Requires Go (see [go.dev/dl](https://go.dev/dl/) for the installer).
@@ -48,8 +73,6 @@ Requires Go (see [go.dev/dl](https://go.dev/dl/) for the installer).
 go build ./...
 go test ./...
 ```
-
-More once the initial implementation lands.
 
 ## License
 
