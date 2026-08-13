@@ -50,7 +50,7 @@ type recoverStartRequest struct {
 }
 
 func (s *Server) handleRecoverStart(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.SMTP.Configured() {
+	if !s.cfg.RecoveryAvailable() {
 		writeError(w, http.StatusServiceUnavailable, "email-based recovery is not configured on this server")
 		return
 	}

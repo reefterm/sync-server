@@ -50,12 +50,6 @@ func newTestServer(t *testing.T) *Server {
 func newTestServerWithMail(t *testing.T, smtpConfigured bool) (*Server, *fakeMailer) {
 	t.Helper()
 
-	st, err := sqlite.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-
 	cfg := config.Config{
 		DBPath:            ":memory:",
 		AllowRegistration: true,
@@ -65,6 +59,31 @@ func newTestServerWithMail(t *testing.T, smtpConfigured bool) (*Server, *fakeMai
 	if smtpConfigured {
 		cfg.SMTP = mail.Config{Host: "smtp.example.com", Port: 587, From: "noreply@example.com"}
 	}
+
+	return newTestServerWithConfig(t, cfg)
+}
+
+// newTestServerWithConsoleRecovery configures no SMTP but does set
+// LogRecoveryTokensToConsole, the homelab fallback path.
+func newTestServerWithConsoleRecovery(t *testing.T) (*Server, *fakeMailer) {
+	t.Helper()
+	return newTestServerWithConfig(t, config.Config{
+		AllowRegistration:          true,
+		SessionTTL:                 time.Hour,
+		RecoveryTokenTTL:           30 * time.Minute,
+		LogRecoveryTokensToConsole: true,
+	})
+}
+
+func newTestServerWithConfig(t *testing.T, cfg config.Config) (*Server, *fakeMailer) {
+	t.Helper()
+
+	st, err := sqlite.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	cfg.DBPath = ":memory:"
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	fake := &fakeMailer{}

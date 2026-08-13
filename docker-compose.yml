@@ -23,6 +23,12 @@ services:
       # REEFTERM_SYNC_SMTP_USERNAME: emailapikey
       # REEFTERM_SYNC_SMTP_PASSWORD: your-smtp-token
       # REEFTERM_SYNC_SMTP_FROM: "Reef Terminal <noreply@your-domain.com>"
+      #
+      # No SMTP server and just running this for yourself? This logs
+      # recovery tokens to the container's console instead of emailing them.
+      # Insecure -- only for a single-operator instance you trust the logs
+      # of -- and ignored entirely if SMTP is configured above.
+      # REEFTERM_SYNC_INSECURE_LOG_RECOVERY_TOKENS: "true"
 
 volumes:
   reefterm-sync-data:

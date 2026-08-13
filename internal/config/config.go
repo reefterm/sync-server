@@ -29,8 +29,21 @@ type Config struct {
 	// it (Zeptomail included, alongside its own API), and it is the only
 	// option that also works for an operator relaying through their own
 	// mail server. Email-based recovery (see internal/api's recover
-	// handlers) is simply unavailable if this is left unset.
+	// handlers) is simply unavailable if this is left unset, unless
+	// LogRecoveryTokensToConsole opts into the console fallback below.
 	SMTP mail.Config
+	// LogRecoveryTokensToConsole logs a recovery email's contents instead of
+	// sending it, for a homelab with no SMTP server. Only takes effect when
+	// SMTP itself is unset; INSECURE because anyone who can read the logs
+	// can then complete recovery for any account.
+	LogRecoveryTokensToConsole bool
+}
+
+// RecoveryAvailable reports whether email-based recovery can run at all --
+// real mail if SMTP is set, or the console fallback if not, but always
+// unavailable if neither is.
+func (c Config) RecoveryAvailable() bool {
+	return c.SMTP.Configured() || c.LogRecoveryTokensToConsole
 }
 
 func Load() Config {
@@ -49,6 +62,7 @@ func Load() Config {
 			TLSMode:            mail.TLSMode(getString("REEFTERM_SYNC_SMTP_TLS", "starttls")),
 			InsecureSkipVerify: getBool("REEFTERM_SYNC_SMTP_INSECURE_SKIP_VERIFY", false),
 		},
+		LogRecoveryTokensToConsole: getBool("REEFTERM_SYNC_INSECURE_LOG_RECOVERY_TOKENS", false),
 	}
 }
 

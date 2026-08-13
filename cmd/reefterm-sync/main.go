@@ -31,9 +31,15 @@ func main() {
 	defer func() { _ = st.Close() }()
 
 	var mailer mail.Mailer
-	if cfg.SMTP.Configured() {
+	switch {
+	case cfg.SMTP.Configured():
 		mailer = mail.NewSMTPMailer(cfg.SMTP)
-	} else {
+	case cfg.LogRecoveryTokensToConsole:
+		log.Warn("no SMTP configured; logging recovery emails to console instead (insecure, homelab-only)")
+		mailer = mail.NoopMailer{Log: func(to, subject, body string) {
+			log.Info("recovery email (not actually sent)", "to", to, "subject", subject, "body", body)
+		}}
+	default:
 		log.Warn("no SMTP server configured; email-based account recovery is unavailable")
 		mailer = mail.NoopMailer{Log: func(to, subject, _ string) {
 			log.Info("mail suppressed (no SMTP configured)", "to", to, "subject", subject)

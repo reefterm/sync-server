@@ -17,6 +17,19 @@ func TestRecoverStartUnavailableWithoutSMTP(t *testing.T) {
 	}
 }
 
+func TestRecoverStartWorksViaConsoleFallbackWithoutSMTP(t *testing.T) {
+	srv, fake := newTestServerWithConsoleRecovery(t)
+	mustRegister(t, srv, "homelab@example.com")
+
+	rec := doJSON(t, srv, "POST", "/api/v1/recover/start", recoverStartRequest{Email: "homelab@example.com"}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got status %d, want 200 when the console fallback is enabled", rec.Code)
+	}
+	if len(fake.sent) != 1 {
+		t.Fatalf("got %d emails sent, want exactly 1 (via the fallback mailer)", len(fake.sent))
+	}
+}
+
 func TestRecoverStartIsGenericWhetherOrNotTheEmailExists(t *testing.T) {
 	srv, fake := newTestServerWithMail(t, true)
 	mustRegister(t, srv, "exists@example.com")

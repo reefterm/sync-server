@@ -58,6 +58,7 @@ All environment variables, all optional except where noted:
 | `REEFTERM_SYNC_SMTP_FROM` | unset | The `From:` address on recovery emails. Required alongside `SMTP_HOST` to enable recovery. |
 | `REEFTERM_SYNC_SMTP_TLS` | `starttls` | `tls` (implicit, port 465), `starttls` (port 587), or `none` (unencrypted -- only ever appropriate for a relay on localhost or a private network). |
 | `REEFTERM_SYNC_SMTP_INSECURE_SKIP_VERIFY` | `false` | Skip TLS certificate verification. For a self-signed relay in development; never appropriate against a real provider. |
+| `REEFTERM_SYNC_INSECURE_LOG_RECOVERY_TOKENS` | `false` | Homelab fallback: if no SMTP server is configured, log recovery emails (including the token) to the console instead of not sending them at all. Ignored if SMTP is configured. Insecure -- anyone who can read the logs can recover any account -- so only for a single-operator instance where you trust whoever has log access. |
 
 Generic SMTP rather than a specific provider's API on purpose: every
 transactional-mail provider speaks it, alongside whatever API they'd rather
