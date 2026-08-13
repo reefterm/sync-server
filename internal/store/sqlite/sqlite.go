@@ -103,6 +103,22 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (model.User, error) 
 		`SELECT id, email, login_password_hash, created_at FROM users WHERE id = ?`, id))
 }
 
+func (s *Store) UpdateLoginPasswordHash(ctx context.Context, userID, hash string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE users SET login_password_hash = ? WHERE id = ?`, hash, userID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) scanUser(row *sql.Row) (model.User, error) {
 	var u model.User
 	if err := row.Scan(&u.ID, &u.Email, &u.LoginPasswordHash, &u.CreatedAt); err != nil {

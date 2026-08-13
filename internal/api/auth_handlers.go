@@ -160,6 +160,82 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type changePasswordRequest struct {
+	CurrentLoginPassword string          `json:"current_login_password"`
+	NewLoginPassword     string          `json:"new_login_password"`
+	WrappedKeyPassphrase json.RawMessage `json:"wrapped_key_passphrase"`
+}
+
+// handleChangePassword updates the login password and the passphrase-wrapped
+// envelope together, in one request. The two have to move together: this
+// server's login password and the client's E2EE passphrase are the same
+// string (see sync-keys.js), so a password change that updated one without
+// the other would leave login and unlock disagreeing about what the
+// passphrase now is.
+//
+// The password hash is updated first. If the envelope update then fails,
+// the response says so explicitly rather than reporting success -- the
+// client's job at that point is to retry only the envelope half, not to
+// assume the whole operation rolled back.
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "malformed request body")
+		return
+	}
+	if len(req.NewLoginPassword) < minPasswordLength {
+		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+	if len(req.WrappedKeyPassphrase) == 0 {
+		writeError(w, http.StatusBadRequest, "a re-sealed passphrase envelope is required")
+		return
+	}
+
+	ctx := r.Context()
+	uid := userID(r)
+
+	user, err := s.store.GetUserByID(ctx, uid)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "account not found")
+		return
+	}
+
+	ok, err := auth.VerifyPassword(req.CurrentLoginPassword, user.LoginPasswordHash)
+	if err != nil || !ok {
+		writeError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+
+	newHash, err := auth.HashPassword(req.NewLoginPassword)
+	if err != nil {
+		s.log.Error("hash new password", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not change password")
+		return
+	}
+
+	if err := s.store.UpdateLoginPasswordHash(ctx, uid, newHash); err != nil {
+		s.log.Error("update password hash", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not change password")
+		return
+	}
+
+	wk := model.WrappedKey{
+		UserID:    uid,
+		Variant:   model.WrappedKeyPassphrase,
+		Envelope:  string(req.WrappedKeyPassphrase),
+		UpdatedAt: time.Now(),
+	}
+	if err := s.store.PutWrappedKey(ctx, wk); err != nil {
+		s.log.Error("update passphrase envelope after password change", "error", err)
+		writeError(w, http.StatusInternalServerError,
+			"password changed, but saving your re-sealed key failed -- try changing it again")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type accountResponse struct {
 	UserID    string    `json:"user_id"`
 	Email     string    `json:"email"`

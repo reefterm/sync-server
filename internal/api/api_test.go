@@ -200,6 +200,74 @@ func TestLogoutInvalidatesTheSession(t *testing.T) {
 	}
 }
 
+func TestChangePasswordUpdatesLoginAndEnvelopeTogether(t *testing.T) {
+	srv := newTestServer(t)
+	reg := mustRegister(t, srv, "change@example.com")
+
+	rec := doJSON(t, srv, "PUT", "/api/v1/account/password", changePasswordRequest{
+		CurrentLoginPassword: "a reasonably long password",
+		NewLoginPassword:     "a brand new password here",
+		WrappedKeyPassphrase: json.RawMessage(`{"payload":"resealed-under-new-password"}`),
+	}, reg.SessionToken)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("change password: got status %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// The old password no longer logs in.
+	oldLogin := doJSON(t, srv, "POST", "/api/v1/login", loginRequest{
+		Email: "change@example.com", LoginPassword: "a reasonably long password",
+	}, "")
+	if oldLogin.Code != http.StatusUnauthorized {
+		t.Fatalf("got status %d, want 401 logging in with the old password after a change", oldLogin.Code)
+	}
+
+	// The new password does.
+	newLogin := doJSON(t, srv, "POST", "/api/v1/login", loginRequest{
+		Email: "change@example.com", LoginPassword: "a brand new password here",
+	}, "")
+	if newLogin.Code != http.StatusOK {
+		t.Fatalf("got status %d, want 200 logging in with the new password", newLogin.Code)
+	}
+
+	var loginResp sessionResponse
+	if err := json.Unmarshal(newLogin.Body.Bytes(), &loginResp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+
+	// The envelope was re-sealed too, and the old session's token still
+	// reads the update: sync/keys is not scoped to which login produced it.
+	keysRec := doJSON(t, srv, "GET", "/api/v1/sync/keys", nil, loginResp.SessionToken)
+	var keys syncKeysResponse
+	if err := json.Unmarshal(keysRec.Body.Bytes(), &keys); err != nil {
+		t.Fatalf("decode sync keys: %v", err)
+	}
+	if string(keys.WrappedKeyPassphrase) != `{"payload":"resealed-under-new-password"}` {
+		t.Errorf("passphrase envelope was not updated: %s", keys.WrappedKeyPassphrase)
+	}
+}
+
+func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
+	srv := newTestServer(t)
+	reg := mustRegister(t, srv, "wrongcur@example.com")
+
+	rec := doJSON(t, srv, "PUT", "/api/v1/account/password", changePasswordRequest{
+		CurrentLoginPassword: "not the actual current password",
+		NewLoginPassword:     "a brand new password here",
+		WrappedKeyPassphrase: json.RawMessage(`{"a":1}`),
+	}, reg.SessionToken)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("got status %d, want 401 for a wrong current password", rec.Code)
+	}
+
+	// And the login password must be genuinely unchanged.
+	login := doJSON(t, srv, "POST", "/api/v1/login", loginRequest{
+		Email: "wrongcur@example.com", LoginPassword: "a reasonably long password",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("got status %d, want 200 -- the original password must still work", login.Code)
+	}
+}
+
 func TestSyncKeysRoundTripAndAreOpaque(t *testing.T) {
 	srv := newTestServer(t)
 	reg := mustRegister(t, srv, "keys@example.com")

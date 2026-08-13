@@ -31,6 +31,7 @@ type Store interface {
 	CreateUser(ctx context.Context, u model.User) error
 	GetUserByEmail(ctx context.Context, email string) (model.User, error)
 	GetUserByID(ctx context.Context, id string) (model.User, error)
+	UpdateLoginPasswordHash(ctx context.Context, userID, hash string) error
 
 	CreateSession(ctx context.Context, s model.Session) error
 	// GetSession looks up a session by the hash of its token, and returns
