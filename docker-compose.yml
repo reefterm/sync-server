@@ -1,0 +1,18 @@
+# Minimal self-host setup: one container, one named volume for the SQLite
+# file. `docker compose up -d` is the whole installation.
+services:
+  sync:
+    build: .
+    # Or, once images are published: image: ghcr.io/reefterm/sync-server:latest
+    restart: unless-stopped
+    ports:
+      - "8420:8420"
+    volumes:
+      - reefterm-sync-data:/data
+    environment:
+      # Set to false once you and whoever else needs an account have
+      # registered, to close the server to new signups.
+      REEFTERM_SYNC_ALLOW_REGISTRATION: "true"
+
+volumes:
+  reefterm-sync-data:
